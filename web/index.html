@@ -1,0 +1,897 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CollabDoc</title>
+    <script>
+      // Apply the saved theme before first paint, so dark mode does not flash.
+      try {
+        const theme = localStorage.getItem("collabdoc.theme");
+        if (theme === "light" || theme === "dark") document.documentElement.dataset.theme = theme;
+      } catch {}
+    </script>
+    <link rel="stylesheet" href="/static/styles.css" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="theme-color" content="#37352f" />
+    <link rel="apple-touch-icon" href="/static/icons/icon-192.png" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📝</text></svg>"
+    />
+  </head>
+  <body>
+    <!-- ============================ sign in ============================ -->
+    <section id="auth" class="auth">
+      <div class="auth-brand"><span class="brand-mark">C</span>CollabDoc</div>
+      <div class="auth-layout">
+        <form class="auth-card" id="auth-form">
+          <h1 id="auth-heading">Welcome back</h1>
+          <p class="auth-sub">Write together in real time, and see who wrote what.</p>
+
+          <label class="field" id="name-field" hidden>
+            <span>Display name</span>
+            <input id="auth-name" type="text" autocomplete="name" placeholder="Ada Lovelace" />
+          </label>
+          <label class="field">
+            <span>Email</span>
+            <input id="auth-email" type="email" autocomplete="email" placeholder="you@example.com" required />
+          </label>
+          <label class="field">
+            <span>Password</span>
+            <input
+              id="auth-password"
+              type="password"
+              autocomplete="current-password"
+              placeholder="At least 8 characters"
+              minlength="8"
+              required
+            />
+          </label>
+
+          <label class="field" id="mfa-field" hidden>
+            <span>Code from your authenticator app</span>
+            <input id="auth-code" type="text" inputmode="numeric" autocomplete="one-time-code" placeholder="123456" maxlength="8" />
+          </label>
+
+          <p class="auth-error" id="auth-error" hidden></p>
+          <button class="primary" id="auth-submit" type="submit">Continue</button>
+          <div class="oauth" id="oauth" hidden>
+            <div class="oauth-or"><span>or</span></div>
+            <div class="oauth-buttons" id="oauth-buttons"></div>
+          </div>
+          <p class="auth-toggle">
+            <span id="auth-toggle-text">New here?</span>
+            <button type="button" class="link" id="auth-toggle">Create an account</button>
+          </p>
+        </form>
+
+        <ul class="auth-points" aria-label="What you get">
+          <li><span>⚡</span><div><b>Live together</b>Every keystroke syncs through operational transformation.</div></li>
+          <li><span>🧠</span><div><b>Know who wrote what</b>A stylometric model attributes each block to its author.</div></li>
+          <li><span>💬</span><div><b>Discuss in place</b>Comment on any passage, reply, and resolve.</div></li>
+          <li><span>🕰️</span><div><b>Nothing is lost</b>Every edit is versioned and can be restored.</div></li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ============================ workspace ========================== -->
+    <div id="app" class="app" hidden>
+      <div class="workspace">
+        <!-- sidebar -->
+        <aside class="sidebar" id="sidebar">
+          <div class="sidebar-top">
+            <button class="switcher" id="account" type="button" title="Account">
+              <span class="avatar sq" id="account-avatar"></span>
+              <span class="switcher-name" id="account-name"></span>
+              <svg class="chev" viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 6.5 8 10l3.5-3.5" /></svg>
+            </button>
+            <button class="icon-button" id="collapse-sidebar" title="Close sidebar (Ctrl+\)">
+              <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8.5 4 4.5 8l4 4M12.5 4l-4 4 4 4" /></svg>
+            </button>
+          </div>
+
+          <div class="menu account-menu" id="account-menu" hidden>
+            <div class="menu-head">
+              <span class="avatar" id="menu-avatar"></span>
+              <span class="menu-who">
+                <b id="menu-name"></b>
+                <span id="menu-email"></span>
+              </span>
+            </div>
+            <div class="menu-sep"></div>
+            <div class="menu-label">Appearance</div>
+            <div class="segmented" id="theme-choice" role="radiogroup" aria-label="Theme">
+              <button type="button" data-theme-value="system">System</button>
+              <button type="button" data-theme-value="light">Light</button>
+              <button type="button" data-theme-value="dark">Dark</button>
+            </div>
+            <div class="menu-sep"></div>
+            <button type="button" class="menu-item" id="open-security">
+              <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2 3 4v4c0 3 2.2 5.2 5 6 2.8-.8 5-3 5-6V4z" /><path d="m6 8 1.5 1.5L10.5 6.5" /></svg>
+              Security &amp; API tokens
+            </button>
+            <button type="button" class="menu-item" id="sign-out">
+              <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3H3.5v10H6M10 5l3 3-3 3M13 8H6.5" /></svg>
+              Log out
+            </button>
+          </div>
+
+          <nav class="sidebar-nav">
+            <button class="nav-item" id="open-search" type="button">
+              <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.5" /><path d="m10.5 10.5 3 3" /></svg>
+              Search
+              <kbd>Ctrl K</kbd>
+            </button>
+            <button class="nav-item" id="open-templates" type="button">
+              <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2.5" y="2.5" width="4.5" height="4.5" rx="1" /><rect x="9" y="2.5" width="4.5" height="4.5" rx="1" /><rect x="2.5" y="9" width="4.5" height="4.5" rx="1" /><rect x="9" y="9" width="4.5" height="4.5" rx="1" /></svg>
+              Templates
+            </button>
+            <button class="nav-item" id="open-home" type="button">
+              <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 7.5 8 3l5.5 4.5M4 6.5v7h8v-7" /></svg>
+              Home
+            </button>
+            <button class="nav-item" id="open-tasks" type="button">
+              <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2.5" y="2.5" width="11" height="11" rx="2" /><path d="m5.5 8 1.8 1.8 3.2-3.6" /></svg>
+              My tasks
+              <span class="nav-count" id="tasks-count" hidden></span>
+            </button>
+            <button class="nav-item" id="open-graph" type="button">
+              <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="4" cy="4.5" r="1.8" /><circle cx="12" cy="5" r="1.8" /><circle cx="8" cy="12" r="1.8" /><path d="M5.6 5.2 10.3 5M5 6l2.2 4.4M11.2 6.6 8.9 10.4" /></svg>
+              Graph view
+            </button>
+            <button class="nav-item" id="open-inbox" type="button" data-popover-anchor>
+              <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 11.5V7a4 4 0 0 1 8 0v4.5l1 1H3zM6.5 13.5a1.5 1.5 0 0 0 3 0" /></svg>
+              Inbox
+              <span class="nav-count" id="inbox-count" hidden></span>
+            </button>
+            <button class="nav-item" id="new-doc" type="button">
+              <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10" /></svg>
+              New page
+            </button>
+          </nav>
+
+          <div class="sidebar-scroll">
+            <div id="favorites-section" hidden>
+              <div class="sidebar-section">Favorites</div>
+              <ul class="doc-list" id="favorite-list"></ul>
+            </div>
+            <div class="sidebar-section">
+              Pages
+              <button class="icon-button tiny" id="new-doc-inline" title="New page">
+                <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3.5v9M3.5 8h9" /></svg>
+              </button>
+            </div>
+            <ul class="doc-list" id="doc-list"></ul>
+          </div>
+
+          <div class="sidebar-foot">
+            <button class="nav-item" id="import-md" type="button">
+              <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 10.5v-8M5 5.5l3-3 3 3M3 13.5h10" /></svg>
+              Import Markdown
+            </button>
+            <button class="nav-item" id="open-trash" type="button">
+              <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8.5h5.8l.6-8.5" /></svg>
+              Trash
+            </button>
+            <button class="nav-item" id="show-shortcuts" type="button">
+              <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="4" width="13" height="8.5" rx="1.5" /><path d="M4 7h1M7 7h1M10 7h2M4.5 10h7" /></svg>
+              Keyboard shortcuts
+            </button>
+          </div>
+        </aside>
+
+        <!-- main -->
+        <main class="main">
+          <header class="topbar">
+            <button class="icon-button" id="toggle-sidebar" title="Toggle sidebar (Ctrl+\)">
+              <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 4h11M2.5 8h11M2.5 12h11" /></svg>
+            </button>
+            <nav class="crumbs" aria-label="Current page">
+              <span class="crumb-parents" id="crumb-parents"></span>
+              <span class="crumb-icon" id="crumb-icon">📄</span>
+              <span class="crumb-title" id="crumb-title">No page</span>
+              <span class="role-chip" id="role-chip" hidden></span>
+              <span class="role-chip lock-chip" id="lock-chip" hidden title="Only the owner can edit this page">🔒 Locked</span>
+            </nav>
+            <span class="save-state" id="save-state"></span>
+            <div class="spacer"></div>
+            <div class="presence" id="presence" aria-label="People here"></div>
+            <div class="connection" id="connection" title="Connection">
+              <span class="dot"></span><span id="connection-text">offline</span>
+            </div>
+            <button class="text-button" id="open-share" type="button">Share</button>
+            <button class="icon-button counted" id="open-comments" title="Comments">
+              <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3.5h10v7H7l-3 2.5v-2.5H3z" /></svg>
+              <span class="count" id="comment-count" hidden></span>
+            </button>
+            <button class="icon-button" id="open-history" title="Version history">
+              <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5.5" /><path d="M8 5v3l2 1.5" /></svg>
+            </button>
+            <button class="icon-button" id="favorite" title="Add to favorites">
+              <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m8 2.5 1.7 3.5 3.8.5-2.8 2.6.7 3.8L8 11.1l-3.4 1.8.7-3.8-2.8-2.6 3.8-.5z" /></svg>
+            </button>
+            <button class="icon-button" id="page-more" title="More">
+              <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="3.5" cy="8" r="1" class="fill" /><circle cx="8" cy="8" r="1" class="fill" /><circle cx="12.5" cy="8" r="1" class="fill" /></svg>
+            </button>
+            <button class="icon-button active" id="toggle-inspector" title="Side panel">
+              <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2.5" y="3" width="11" height="10" rx="1.5" /><path d="M10 3v10" /></svg>
+            </button>
+          </header>
+
+          <div class="menu more-menu" id="more-menu" hidden>
+            <div class="menu-stats" id="more-stats"></div>
+            <div class="menu-sep"></div>
+            <button type="button" class="menu-item" data-action="copy-link">
+              <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M7 9a2.5 2.5 0 0 0 3.5 0l2-2A2.5 2.5 0 0 0 9 3.5l-.7.7M9 7a2.5 2.5 0 0 0-3.5 0l-2 2A2.5 2.5 0 0 0 7 12.5l.7-.7" /></svg>
+              Copy link
+            </button>
+            <button type="button" class="menu-item" data-action="integrity">
+              <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2 3 4v4c0 3 2.2 5.2 5 6 2.8-.8 5-3 5-6V4z" /><path d="m6 8 1.5 1.5L10.5 6.5" /></svg>
+              Integrity report
+            </button>
+            <button type="button" class="menu-item" data-action="duplicate-page">
+              <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="5" y="5" width="8" height="8" rx="1.5" /><path d="M3 10.5V4a1 1 0 0 1 1-1h6.5" /></svg>
+              Duplicate page
+            </button>
+            <button type="button" class="menu-item" data-action="duplicate-tree">
+              <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="5" y="5" width="8" height="8" rx="1.5" /><path d="M3 10.5V4a1 1 0 0 1 1-1h6.5M7.5 9h3" /></svg>
+              Duplicate with sub-pages
+            </button>
+            <button type="button" class="menu-item" data-action="toggle-lock" data-owner-only>
+              <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="3.5" y="7" width="9" height="6.5" rx="1.5" /><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" /></svg>
+              <span id="lock-label">Lock page</span>
+            </button>
+            <button type="button" class="menu-item" data-action="add-subpage" data-editor-only>
+              <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5h5l3 3v8H4zM8 7.5v4M6 9.5h4" /></svg>
+              Add a sub-page
+            </button>
+            <button type="button" class="menu-item" data-action="move-top" data-editor-only>
+              <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 13V4M4.5 7.5 8 4l3.5 3.5M3 2.5h10" /></svg>
+              Move to top level
+            </button>
+            <div class="menu-sep"></div>
+            <div class="menu-label">Export</div>
+            <button type="button" class="menu-item" data-action="export-md">
+              <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.5v8M5 7.5l3 3 3-3M3 13.5h10" /></svg>
+              Markdown (.md)
+            </button>
+            <button type="button" class="menu-item" data-action="export-html">
+              <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.5v8M5 7.5l3 3 3-3M3 13.5h10" /></svg>
+              Web page (.html)
+            </button>
+            <button type="button" class="menu-item" data-action="print">
+              <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 6V2.5h7V6M4.5 11h-2V6h11v5h-2M4.5 9h7v4.5h-7z" /></svg>
+              Print or save as PDF
+            </button>
+            <div class="menu-sep" data-owner-only></div>
+            <button type="button" class="menu-item danger" data-action="delete-page" data-owner-only>
+              <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8.5h5.8l.6-8.5" /></svg>
+              Move to trash
+            </button>
+          </div>
+
+          <div class="banner offline-banner" id="offline-banner" hidden>
+            You are offline. Changes will sync when the connection comes back.
+          </div>
+          <div class="banner follow-banner" id="follow-banner" hidden>
+            <span class="avatar" id="follow-avatar"></span>
+            <span>Following <b id="follow-name"></b></span>
+            <button type="button" class="small" id="follow-stop">Stop · Esc</button>
+          </div>
+          <div class="find-bar" id="find-bar" hidden>
+            <input id="find-input" type="text" placeholder="Find in page" autocomplete="off" aria-label="Find" />
+            <span class="find-count" id="find-count"></span>
+            <button type="button" class="icon-button tiny" id="find-prev" title="Previous (Shift+Enter)">↑</button>
+            <button type="button" class="icon-button tiny" id="find-next" title="Next (Enter)">↓</button>
+            <label class="find-case" title="Match case"><input type="checkbox" id="find-case" />Aa</label>
+            <span class="find-replace" id="find-replace-row">
+              <input id="replace-input" type="text" placeholder="Replace with" autocomplete="off" aria-label="Replace with" />
+              <button type="button" class="small" id="replace-one">Replace</button>
+              <button type="button" class="small" id="replace-all">All</button>
+            </span>
+            <button type="button" class="icon-button tiny" id="find-close" title="Close (Esc)"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 4 8 8M12 4l-8 8" /></svg></button>
+          </div>
+
+          <div class="scroller" id="scroller">
+            <div class="empty-state home" id="empty-state" hidden>
+              <h2 id="home-greeting">Welcome</h2>
+              <p class="home-sub" id="home-sub">Pick a page from the sidebar, start from a template, or begin with a blank page.</p>
+              <div class="empty-actions">
+                <button class="primary inline" id="empty-new" type="button">New page</button>
+                <button class="small" id="empty-templates" type="button">Browse templates</button>
+              </div>
+              <div class="home-grid">
+                <section class="home-card">
+                  <h3>Your writing this week</h3>
+                  <div class="home-big"><b id="home-words">0</b> words</div>
+                  <div class="sparkline" id="home-spark"></div>
+                  <div class="home-note" id="home-streak"></div>
+                </section>
+                <section class="home-card">
+                  <h3>Due soon</h3>
+                  <ul class="home-list" id="home-tasks"></ul>
+                </section>
+                <section class="home-card">
+                  <h3>Recently edited</h3>
+                  <ul class="home-list" id="home-recent"></ul>
+                </section>
+                <section class="home-card">
+                  <h3>Unread mentions</h3>
+                  <ul class="home-list" id="home-mentions"></ul>
+                </section>
+              </div>
+            </div>
+
+            <div class="page" id="page" data-view="page">
+              <div class="page-head">
+                <button class="page-icon" id="page-icon" type="button" title="Change icon">📄</button>
+                <input id="doc-title" class="doc-title" placeholder="Untitled" aria-label="Document title" />
+
+                <dl class="properties">
+                  <div class="prop">
+                    <dt>
+                      <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="6" r="2.5" /><path d="M3.5 13c.6-2.3 2.3-3.5 4.5-3.5s3.9 1.2 4.5 3.5" /></svg>
+                      Access
+                    </dt>
+                    <dd><span class="tag" id="prop-role">—</span></dd>
+                  </div>
+                  <div class="prop">
+                    <dt>
+                      <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5.5" /><path d="M8 5v3l2 1.5" /></svg>
+                      Last edited
+                    </dt>
+                    <dd id="prop-edited">—</dd>
+                  </div>
+                  <div class="prop">
+                    <dt>
+                      <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 4h10M3 8h10M3 12h6" /></svg>
+                      Version
+                    </dt>
+                    <dd id="prop-version">—</dd>
+                  </div>
+                  <div class="prop">
+                    <dt>
+                      <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.5 9.3 6.7 13.5 8l-4.2 1.3L8 13.5 6.7 9.3 2.5 8l4.2-1.3z" /></svg>
+                      Attribution
+                    </dt>
+                    <dd>
+                      <span id="model-state">—</span>
+                      <label class="switch" title="Tint each block with its author's colour">
+                        <input type="checkbox" id="show-attribution" checked />
+                        <span class="track"><span class="thumb"></span></span>
+                        <span>Show authors</span>
+                      </label>
+                    </dd>
+                  </div>
+                </dl>
+              </div>
+
+              <div class="backlinks" id="backlinks" hidden>
+                <span class="backlinks-label">Linked from</span>
+                <span class="backlinks-list" id="backlinks-list"></span>
+              </div>
+
+              <div class="page-bar">
+                <div class="views" id="views" role="tablist" aria-label="View">
+                  <button type="button" data-view="page" title="Formatted page">Page</button>
+                  <button type="button" data-view="markdown" title="Raw Markdown">Markdown</button>
+                  <button type="button" data-view="split" title="Markdown beside the page">Split</button>
+                </div>
+                <div class="toolbar" id="toolbar">
+                  <button data-format="bold" title="Bold (Ctrl+B)"><b>B</b></button>
+                  <button data-format="italic" title="Italic (Ctrl+I)"><i>i</i></button>
+                  <button data-format="underline" title="Underline (Ctrl+U)"><u>U</u></button>
+                  <button data-format="strike" title="Strikethrough (Ctrl+Shift+S)"><s>S</s></button>
+                  <button data-format="code" title="Inline code (Ctrl+E)" class="mono">&lt;/&gt;</button>
+                  <button data-format="link" title="Link (Ctrl+K)">
+                    <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M7 9a2.5 2.5 0 0 0 3.5 0l2-2A2.5 2.5 0 0 0 9 3.5l-.7.7M9 7a2.5 2.5 0 0 0-3.5 0l-2 2A2.5 2.5 0 0 0 7 12.5l.7-.7" /></svg>
+                  </button>
+                  <span class="sep"></span>
+                  <button data-format="h1" title="Heading 1 (Ctrl+Alt+1)">H1</button>
+                  <button data-format="h2" title="Heading 2 (Ctrl+Alt+2)">H2</button>
+                  <button data-format="bullet" title="Bulleted list (Ctrl+Shift+6)">
+                    <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="3.5" cy="4.5" r=".8" class="fill" /><circle cx="3.5" cy="11.5" r=".8" class="fill" /><path d="M6.5 4.5h7M6.5 11.5h7" /></svg>
+                  </button>
+                  <button data-format="number" title="Numbered list (Ctrl+Shift+7)">
+                    <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 3.5h1v3M2.5 6.5h2M2.5 10h1.6l-1.6 2.5h1.8M6.5 4.5h7M6.5 11.5h7" /></svg>
+                  </button>
+                  <button data-format="todo" title="To-do (Ctrl+Shift+5)">
+                    <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2.5" y="2.5" width="11" height="11" rx="2" /><path d="m5.5 8 1.8 1.8 3.2-3.6" /></svg>
+                  </button>
+                  <button data-format="quote" title="Quote (Ctrl+Shift+8)">
+                    <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 3v10M6.5 5h7M6.5 8h7M6.5 11h4.5" /></svg>
+                  </button>
+                  <button data-format="callout" title="Callout (Ctrl+Shift+9)">
+                    <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3" width="12" height="10" rx="2" /><path d="M5.5 6.5h5M5.5 9.5h3" /></svg>
+                  </button>
+                  <span class="sep"></span>
+                  <button id="undo" title="Undo (Ctrl+Z)">
+                    <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5.5 3.5 2.5 6.5l3 3M2.5 6.5h7a3.5 3.5 0 0 1 0 7H7" /></svg>
+                  </button>
+                  <button id="redo" title="Redo (Ctrl+Shift+Z)">
+                    <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m10.5 3.5 3 3-3 3M13.5 6.5h-7a3.5 3.5 0 0 0 0 7H9" /></svg>
+                  </button>
+                  <span class="sep"></span>
+                  <button id="ai-button" class="ai-tool" title="Writing assistant (Ctrl+J)" data-always>✨ AI</button>
+                  <button id="find-button" title="Find and replace (Ctrl+F)" data-always>
+                    <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.5" /><path d="m10.5 10.5 3 3" /></svg>
+                  </button>
+                  <button id="speak-button" title="Read aloud" data-always hidden>
+                    <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 6.5h2.5L9 3.5v9l-3.5-3H3zM11 6a2.8 2.8 0 0 1 0 4M12.5 4.5a5 5 0 0 1 0 7" /></svg>
+                  </button>
+                  <button id="dictate-button" title="Dictate (type with your voice)" hidden>
+                    <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="6" y="2.5" width="4" height="7" rx="2" /><path d="M4 8a4 4 0 0 0 8 0M8 12v2" /></svg>
+                  </button>
+                  <button id="save-now" title="Save a named version (Ctrl+S)">
+                    <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 2.5h8l2.5 2.5v8.5h-11zM5.5 2.5v3h5v-3M5 13.5v-4h6v4" /></svg>
+                  </button>
+                </div>
+              </div>
+
+              <div class="surfaces">
+                <div class="surface source-surface">
+                  <div class="source-wrap" id="source-wrap">
+                    <div class="highlight-layer" id="highlight" aria-hidden="true"></div>
+                    <textarea
+                      id="source"
+                      spellcheck="false"
+                      rows="1"
+                      placeholder="Raw Markdown: # heading, - list, - [ ] to-do, > quote, **bold**, *italic*"
+                    ></textarea>
+                    <div class="cursor-layer" id="cursor-layer" aria-hidden="true"></div>
+                    <div class="mirror" id="mirror" aria-hidden="true"></div>
+                  </div>
+                </div>
+                <div class="surface page-surface">
+                  <div class="editor-wrap" id="editor-wrap">
+                    <article
+                      class="editor preview"
+                      id="preview"
+                      contenteditable="true"
+                      spellcheck="true"
+                      role="textbox"
+                      aria-multiline="true"
+                      aria-label="Page content"
+                    ></article>
+                    <div class="cursor-layer" id="page-cursors" aria-hidden="true"></div>
+                    <div class="block-handle" id="block-handle" hidden>
+                      <button type="button" id="handle-add" title="Add a block below">
+                        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3.5v9M3.5 8h9" /></svg>
+                      </button>
+                      <button type="button" id="handle-drag" title="Drag to move · click for options">
+                        <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="6" cy="4" r="1" class="fill" /><circle cx="10" cy="4" r="1" class="fill" /><circle cx="6" cy="8" r="1" class="fill" /><circle cx="10" cy="8" r="1" class="fill" /><circle cx="6" cy="12" r="1" class="fill" /><circle cx="10" cy="12" r="1" class="fill" /></svg>
+                      </button>
+                    </div>
+                    <div class="drop-line" id="drop-line" hidden></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </main>
+
+        <!-- inspector -->
+        <aside class="inspector" id="inspector">
+          <nav class="tabs" id="tabs">
+            <button class="active" data-tab="authors">Authors</button>
+            <button data-tab="comments">Comments</button>
+            <button data-tab="activity">Activity</button>
+            <button data-tab="history">History</button>
+            <button data-tab="share">Share</button>
+          </nav>
+
+          <section class="tab-panel" data-panel="authors">
+            <div id="attribution-summary" class="summary"></div>
+            <button type="button" class="small replay-button" id="open-integrity"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2 3 4v4c0 3 2.2 5.2 5 6 2.8-.8 5-3 5-6V4z" /><path d="m6 8 1.5 1.5L10.5 6.5" /></svg> Integrity report</button>
+            <h3>Blocks</h3>
+            <ul class="block-list" id="block-list"></ul>
+          </section>
+
+          <section class="tab-panel" data-panel="comments" hidden>
+            <form class="composer" id="comment-form">
+              <blockquote class="anchor-quote" id="comment-anchor" hidden></blockquote>
+              <textarea id="comment-body" rows="2" placeholder="Add a comment…" maxlength="4000"></textarea>
+              <div class="composer-foot">
+                <span class="panel-hint" id="comment-hint">Select text on the page to comment on it.</span>
+                <button class="primary small" type="submit">Comment</button>
+              </div>
+            </form>
+            <div class="thread-filter">
+              <label class="switch small">
+                <input type="checkbox" id="show-resolved" />
+                <span class="track"><span class="thumb"></span></span>
+                <span>Show resolved</span>
+              </label>
+            </div>
+            <ul class="thread-list" id="thread-list"></ul>
+          </section>
+
+          <section class="tab-panel" data-panel="activity" hidden>
+            <div class="stats" id="page-stats"></div>
+            <h3>Writing over time <span class="h3-note" id="activity-bucket"></span></h3>
+            <div class="chart-wrap">
+              <div class="chart" id="activity-chart"></div>
+              <div class="chart-tip" id="activity-tip" hidden></div>
+            </div>
+            <ul class="legend" id="activity-legend"></ul>
+            <table class="data-table" id="activity-table">
+              <thead><tr><th>Author</th><th>Sessions</th><th>Time</th><th>Added</th><th>Removed</th></tr></thead>
+              <tbody></tbody>
+            </table>
+            <h3>Recent activity</h3>
+            <ul class="activity-feed" id="activity-feed"></ul>
+            <h3>Outline</h3>
+            <ul class="outline" id="outline"></ul>
+          </section>
+
+          <section class="tab-panel" data-panel="history" hidden>
+            <p class="panel-hint">
+              Every editing session, newest first. Open one to see the page as it
+              stood then, or watch the whole page being written.
+            </p>
+            <button type="button" class="small replay-button" id="open-replay">▶ Replay the page's history</button>
+            <ul class="version-list" id="version-list"></ul>
+          </section>
+
+          <section class="tab-panel" data-panel="share" hidden>
+            <h3>Invite</h3>
+            <form class="share-form" id="invite-form">
+              <input id="invite-email" type="email" placeholder="Email address" required />
+              <select id="invite-role">
+                <option value="EDITOR">Can edit</option>
+                <option value="VIEWER">Can view</option>
+              </select>
+              <button class="primary small" type="submit">Invite</button>
+            </form>
+
+            <h3>People with access</h3>
+            <ul class="people-list" id="people-list"></ul>
+
+            <h3>Share link</h3>
+            <div class="share-link">
+              <select id="link-role">
+                <option value="">Off — only invited people</option>
+                <option value="VIEWER">Anyone with the link can view</option>
+                <option value="EDITOR">Anyone with the link can edit</option>
+              </select>
+              <div class="link-row">
+                <input id="link-url" readonly placeholder="Link sharing is off" />
+                <button class="small" id="copy-link" type="button">Copy</button>
+              </div>
+            </div>
+            <p class="panel-hint" id="share-note"></p>
+
+            <h3>Publish to web</h3>
+            <div class="share-link">
+              <label class="publish-toggle">
+                <input type="checkbox" id="publish-toggle" />
+                <span>Anyone with the link can read this page — no account needed</span>
+              </label>
+              <div class="link-row">
+                <input id="publish-url" readonly placeholder="Not published" />
+                <button class="small" id="copy-publish" type="button">Copy</button>
+                <a class="small button-link" id="open-publish" target="_blank" rel="noopener" hidden>Open</a>
+              </div>
+            </div>
+            <p class="panel-hint" id="publish-note"></p>
+          </section>
+        </aside>
+      </div>
+
+      <!-- floating editor UI -->
+      <div class="menu slash-menu" id="slash-menu" hidden role="listbox" aria-label="Insert block"></div>
+
+      <!-- inbox -->
+      <div class="menu inbox-menu" id="inbox-menu" hidden>
+        <div class="inbox-head">
+          <b>Inbox</b>
+          <button class="text-button small" id="inbox-read-all" type="button">Mark all read</button>
+        </div>
+        <ul class="inbox-list" id="inbox-list"></ul>
+      </div>
+
+      <!-- trash -->
+      <div class="modal" id="trash" hidden>
+        <div class="modal-card" role="dialog" aria-labelledby="trash-title">
+          <header>
+            <div>
+              <h3 id="trash-title">Trash</h3>
+              <span class="modal-sub">Pages here are deleted for good after 30 days.</span>
+            </div>
+            <button class="icon-button" data-close title="Close (Esc)">
+              <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 4 8 8M12 4l-8 8" /></svg>
+            </button>
+          </header>
+          <div class="modal-body">
+            <ul class="trash-list" id="trash-list"></ul>
+          </div>
+        </div>
+      </div>
+
+      <input type="file" id="image-input" accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden />
+      <input type="file" id="import-input" accept=".md,.markdown,.txt,text/markdown,text/plain" multiple hidden />
+      <div class="bubble" id="bubble" hidden>
+        <div class="bubble-row" id="bubble-actions">
+          <button type="button" data-inline="bold" title="Bold"><b>B</b></button>
+          <button type="button" data-inline="italic" title="Italic"><i>i</i></button>
+          <button type="button" data-inline="underline" title="Underline"><u>U</u></button>
+          <button type="button" data-inline="strike" title="Strikethrough"><s>S</s></button>
+          <button type="button" data-inline="code" title="Code" class="mono">&lt;/&gt;</button>
+          <span class="sep"></span>
+          <button type="button" data-inline="link" title="Link">Link</button>
+          <button type="button" data-inline="ai" title="Ask AI about the selection" class="ai-tool">✨ AI</button>
+          <button type="button" data-inline="comment" title="Comment">
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3.5h10v7H7l-3 2.5v-2.5H3z" /></svg>
+            Comment
+          </button>
+        </div>
+        <form class="bubble-row" id="link-form" hidden>
+          <input id="link-input" type="text" placeholder="Paste a link…" autocomplete="off" />
+          <button type="submit" class="primary small">Apply</button>
+          <button type="button" class="small" id="link-remove">Remove</button>
+        </form>
+      </div>
+      <div class="menu block-menu" id="block-menu" hidden></div>
+      <div class="menu emoji-picker" id="emoji-picker" hidden>
+        <div class="picker-head">
+          <span>Icon</span>
+          <button type="button" class="link" id="emoji-random">Random</button>
+          <button type="button" class="link" id="emoji-remove">Remove</button>
+        </div>
+        <div class="emoji-grid" id="emoji-grid"></div>
+      </div>
+
+      <div class="toast" id="toast" hidden></div>
+
+      <!-- command palette -->
+      <div class="modal palette-modal" id="palette" hidden>
+        <div class="palette" role="dialog" aria-label="Search">
+          <div class="palette-input">
+            <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.5" /><path d="m10.5 10.5 3 3" /></svg>
+            <input id="palette-input" type="text" placeholder="Search pages or type a command…" autocomplete="off" />
+            <kbd>Esc</kbd>
+          </div>
+          <ul class="palette-results" id="palette-results" role="listbox"></ul>
+          <div class="palette-foot"><span>↑↓ to navigate</span><span>↵ to open</span></div>
+        </div>
+      </div>
+
+      <!-- templates -->
+      <div class="modal" id="templates" hidden>
+        <div class="modal-card wide" role="dialog" aria-labelledby="templates-title">
+          <header>
+            <div>
+              <h3 id="templates-title">Start from a template</h3>
+              <span class="modal-sub">Every template is an ordinary page you can change.</span>
+            </div>
+            <button class="icon-button" data-close title="Close (Esc)">
+              <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 4 8 8M12 4l-8 8" /></svg>
+            </button>
+          </header>
+          <div class="template-grid" id="template-grid"></div>
+        </div>
+      </div>
+
+      <!-- shortcuts -->
+      <div class="modal" id="shortcuts" hidden>
+        <div class="modal-card" role="dialog" aria-labelledby="shortcuts-title">
+          <header>
+            <h3 id="shortcuts-title">Keyboard shortcuts</h3>
+            <button class="icon-button" data-close title="Close (Esc)">
+              <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 4 8 8M12 4l-8 8" /></svg>
+            </button>
+          </header>
+          <div class="modal-body shortcut-body">
+            <dl class="shortcut-list">
+              <dt>Search and commands</dt><dd><kbd>Ctrl</kbd><kbd>K</kbd></dd>
+              <dt>Insert a block</dt><dd><kbd>/</kbd></dd>
+              <dt>Mention someone</dt><dd><kbd>@</kbd></dd>
+              <dt>Next · previous table cell</dt><dd><kbd>Tab</kbd> <kbd>Shift</kbd><kbd>Tab</kbd></dd>
+              <dt>Bold · italic · underline</dt><dd><kbd>Ctrl</kbd><kbd>B</kbd> <kbd>I</kbd> <kbd>U</kbd></dd>
+              <dt>Strikethrough</dt><dd><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>S</kbd></dd>
+              <dt>Inline code</dt><dd><kbd>Ctrl</kbd><kbd>E</kbd></dd>
+              <dt>Link (with text selected)</dt><dd><kbd>Ctrl</kbd><kbd>K</kbd></dd>
+              <dt>Text · heading 1–3</dt><dd><kbd>Ctrl</kbd><kbd>Alt</kbd><kbd>0</kbd>–<kbd>3</kbd></dd>
+              <dt>To-do · bullet · numbered · quote · callout</dt><dd><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>5</kbd>–<kbd>9</kbd></dd>
+              <dt>Indent · outdent</dt><dd><kbd>Tab</kbd> <kbd>Shift</kbd><kbd>Tab</kbd></dd>
+              <dt>Move block up · down</dt><dd><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>↑</kbd> <kbd>↓</kbd></dd>
+              <dt>Duplicate block</dt><dd><kbd>Ctrl</kbd><kbd>D</kbd></dd>
+              <dt>Undo · redo</dt><dd><kbd>Ctrl</kbd><kbd>Z</kbd> <kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>Z</kbd></dd>
+              <dt>Save a version</dt><dd><kbd>Ctrl</kbd><kbd>S</kbd></dd>
+              <dt>Toggle sidebar</dt><dd><kbd>Ctrl</kbd><kbd>\</kbd></dd>
+            </dl>
+            <p class="panel-hint">
+              Markdown works as you type: <code>#</code> heading, <code>-</code> bullet,
+              <code>1.</code> numbered, <code>[]</code> to-do, <code>&gt;</code> quote,
+              <code>---</code> divider, <code>**bold**</code>, <code>*italic*</code>,
+              <code>`code`</code>, <code>~~strike~~</code>, <code>```</code> code block,
+              <code>| a | b |</code> table. Paste or drop an image to upload it.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <!-- version preview -->
+      <div class="modal" id="ai-modal" hidden>
+        <div class="modal-card wide" role="dialog" aria-labelledby="ai-title">
+          <header>
+            <div>
+              <h3 id="ai-title">✨ Writing assistant</h3>
+              <span class="modal-sub" id="ai-sub"></span>
+            </div>
+            <button class="icon-button" data-close title="Close (Esc)"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 4 8 8M12 4l-8 8" /></svg></button>
+          </header>
+          <div class="ai-actions segmented" id="ai-actions" role="radiogroup" aria-label="What to do">
+            <button type="button" data-ai="summarize">Summarize</button>
+            <button type="button" data-ai="improve">Improve</button>
+            <button type="button" data-ai="continue">Continue</button>
+            <button type="button" data-ai="outline">Outline</button>
+          </div>
+          <div class="modal-body">
+            <div class="ai-status" id="ai-status"></div>
+            <article class="editor preview static" id="ai-result"></article>
+          </div>
+          <footer>
+            <span class="ai-source" id="ai-source"></span>
+            <button class="small" type="button" id="ai-copy">Copy</button>
+            <button class="small" type="button" data-close>Discard</button>
+            <button class="small" type="button" id="ai-replace">Replace selection</button>
+            <button class="primary inline" type="button" id="ai-insert">Insert below</button>
+          </footer>
+        </div>
+      </div>
+
+      <div class="modal" id="replay-modal" hidden>
+        <div class="modal-card wide" role="dialog" aria-labelledby="replay-title">
+          <header>
+            <div>
+              <h3 id="replay-title">History replay</h3>
+              <span class="modal-sub" id="replay-sub">Loading…</span>
+            </div>
+            <button class="icon-button" data-close title="Close (Esc)"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 4 8 8M12 4l-8 8" /></svg></button>
+          </header>
+          <div class="replay-controls">
+            <button type="button" class="primary inline" id="replay-play">▶ Play</button>
+            <input type="range" id="replay-scrub" min="0" max="0" value="0" aria-label="Position in history" />
+            <div class="segmented" id="replay-speed" role="radiogroup" aria-label="Speed">
+              <button type="button" data-speed="1">1×</button>
+              <button type="button" data-speed="4" class="active">4×</button>
+              <button type="button" data-speed="16">16×</button>
+              <button type="button" data-speed="64">64×</button>
+            </div>
+          </div>
+          <div class="replay-who" id="replay-who"></div>
+          <div class="modal-body">
+            <article class="editor preview static" id="replay-content"></article>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal" id="integrity-modal" hidden>
+        <div class="modal-card wide" role="dialog" aria-labelledby="integrity-title">
+          <header>
+            <div>
+              <h3 id="integrity-title">Integrity report</h3>
+              <span class="modal-sub" id="integrity-sub">Who wrote this page, and what a reviewer should look at.</span>
+            </div>
+            <div class="modal-actions">
+              <button type="button" class="small" id="integrity-download" disabled>Download</button>
+              <button class="icon-button" data-close title="Close (Esc)"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 4 8 8M12 4l-8 8" /></svg></button>
+            </div>
+          </header>
+          <div class="modal-body"><div class="integrity" id="integrity-body"></div></div>
+        </div>
+      </div>
+
+      <div class="modal" id="graph-modal" hidden>
+        <div class="modal-card full" role="dialog" aria-labelledby="graph-title">
+          <header>
+            <div>
+              <h3 id="graph-title">Graph view</h3>
+              <span class="modal-sub" id="graph-sub">Your pages, how they nest and what links to what.</span>
+            </div>
+            <button class="icon-button" data-close title="Close (Esc)"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 4 8 8M12 4l-8 8" /></svg></button>
+          </header>
+          <div class="graph-toolbar">
+            <input type="search" id="graph-search" placeholder="Find a page…" aria-label="Find a page in the graph" autocomplete="off" />
+            <label class="graph-toggle"><input type="checkbox" id="graph-show-parent" checked /><i class="edge-parent"></i>Sub-pages</label>
+            <label class="graph-toggle"><input type="checkbox" id="graph-show-link" checked /><i class="edge-link"></i>Links</label>
+            <label class="graph-toggle" title="Only pages within two steps of the open page"><input type="checkbox" id="graph-local" />Around this page</label>
+            <span class="graph-zoom">
+              <button type="button" class="icon-button" id="graph-zoom-out" title="Zoom out">−</button>
+              <button type="button" class="icon-button" id="graph-zoom-in" title="Zoom in">+</button>
+              <button type="button" class="small" id="graph-fit" title="Fit every page in view">Fit</button>
+            </span>
+          </div>
+          <div class="graph-wrap" id="graph-wrap"></div>
+          <footer class="graph-legend">
+            <span>Drag a page to pull its neighbours · drag the background to pan · scroll to zoom</span>
+            <span>Click for details · double-click to open</span>
+            <span>Size: words on the page</span>
+          </footer>
+        </div>
+      </div>
+
+      <div class="modal" id="tasks-modal" hidden>
+        <div class="modal-card" role="dialog" aria-labelledby="tasks-title">
+          <header>
+            <div>
+              <h3 id="tasks-title">My tasks</h3>
+              <span class="modal-sub">Open to-dos that @mention you, and unassigned ones on your pages. Add a date with /due.</span>
+            </div>
+            <button class="icon-button" data-close title="Close (Esc)"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 4 8 8M12 4l-8 8" /></svg></button>
+          </header>
+          <div class="modal-body"><div class="task-groups" id="task-groups"></div></div>
+        </div>
+      </div>
+
+      <div class="modal" id="security-modal" hidden>
+        <div class="modal-card" role="dialog" aria-labelledby="security-title">
+          <header>
+            <div>
+              <h3 id="security-title">Security</h3>
+              <span class="modal-sub">Two-factor sign-in and API tokens for scripts.</span>
+            </div>
+            <button class="icon-button" data-close title="Close (Esc)"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 4 8 8M12 4l-8 8" /></svg></button>
+          </header>
+          <div class="modal-body security">
+            <section>
+              <h4>Two-factor sign-in <span class="tag" id="mfa-state">Off</span></h4>
+              <p class="panel-hint" id="mfa-hint">After your password, also ask for a 6-digit code from an authenticator app.</p>
+              <div class="mfa-setup" id="mfa-setup" hidden>
+                <p>Add this key to your authenticator app (Google Authenticator, 1Password, Authy…), then enter the code it shows.</p>
+                <code class="secret" id="mfa-secret"></code>
+                <a class="link" id="mfa-uri" href="#">Open in authenticator app</a>
+              </div>
+              <form class="inline-form" id="mfa-form">
+                <input id="mfa-code" type="text" inputmode="numeric" autocomplete="one-time-code" placeholder="6-digit code" maxlength="8" hidden />
+                <button class="primary inline" type="submit" id="mfa-submit">Turn on</button>
+              </form>
+            </section>
+            <section>
+              <h4>API tokens</h4>
+              <p class="panel-hint">Use a token as <code>Authorization: Bearer cd_…</code> from scripts. It is shown once.</p>
+              <form class="inline-form" id="token-form">
+                <input id="token-name" type="text" placeholder="Token name, e.g. CI export" maxlength="80" required />
+                <button class="primary inline" type="submit">Create</button>
+              </form>
+              <div class="token-new" id="token-new" hidden>
+                <code id="token-value"></code>
+                <button type="button" class="small" id="token-copy">Copy</button>
+              </div>
+              <ul class="token-list" id="token-list"></ul>
+            </section>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal" id="version-modal" hidden>
+        <div class="modal-card" role="dialog" aria-labelledby="version-modal-title">
+          <header>
+            <div>
+              <h3 id="version-modal-title">Version</h3>
+              <span class="modal-sub" id="version-modal-sub"></span>
+            </div>
+            <button class="icon-button" id="version-close" title="Close (Esc)">
+              <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 4 8 8M12 4l-8 8" /></svg>
+            </button>
+          </header>
+          <div class="modal-body">
+            <article class="editor preview static" id="version-content"></article>
+          </div>
+          <footer>
+            <label class="compare-toggle">
+              <input type="checkbox" id="version-compare" />
+              Compare with current
+            </label>
+            <button class="small" id="version-cancel" type="button">Cancel</button>
+            <button class="primary inline" id="version-restore">Restore this version</button>
+          </footer>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="/static/app.js"></script>
+  </body>
+</html>

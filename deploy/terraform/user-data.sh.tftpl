@@ -1,0 +1,60 @@
+#!/bin/bash
+# First boot of the k3s node. Log: /var/log/cloud-init-output.log
+set -euxo pipefail
+
+dnf install -y iptables-nft
+
+# Single-node Kubernetes. Traefik is off: Caddy is the router (see k8s/router.yaml).
+curl -sfL https://get.k3s.io | \
+  INSTALL_K3S_CHANNEL=v1.33 INSTALL_K3S_SKIP_SELINUX_RPM=true \
+  sh -s - server --disable traefik --tls-san ${public_ip} --write-kubeconfig-mode 600
+
+export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+until k3s kubectl get nodes 2>/dev/null | grep -q ' Ready'; do sleep 3; done
+
+# Hand the kubeconfig to the operator through SSM, pointed at the public IP.
+sed "s/127.0.0.1/${public_ip}/" /etc/rancher/k3s/k3s.yaml > /root/kubeconfig-public.yaml
+aws ssm put-parameter --region ${region} --name ${kubeconfig_name} \
+  --type SecureString --tier Advanced --overwrite \
+  --value file:///root/kubeconfig-public.yaml
+shred -u /root/kubeconfig-public.yaml
+
+# ECR login tokens expire after 12 hours, so the image pull secret is
+# refreshed on a timer from the instance role.
+cat > /usr/local/bin/ecr-pull-secret <<'EOF'
+#!/bin/bash
+set -euo pipefail
+export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+password=$(aws ecr get-login-password --region ${region})
+k3s kubectl create namespace collabdoc --dry-run=client -o yaml | k3s kubectl apply -f -
+k3s kubectl -n collabdoc create secret docker-registry ecr-pull \
+  --docker-server=${registry} --docker-username=AWS --docker-password="$password" \
+  --dry-run=client -o yaml | k3s kubectl apply -f -
+EOF
+chmod 700 /usr/local/bin/ecr-pull-secret
+
+cat > /etc/systemd/system/ecr-pull-secret.service <<'EOF'
+[Unit]
+Description=Refresh the ECR image pull secret
+After=k3s.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/ecr-pull-secret
+EOF
+
+cat > /etc/systemd/system/ecr-pull-secret.timer <<'EOF'
+[Unit]
+Description=Refresh the ECR image pull secret every 6 hours
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=6h
+
+[Install]
+WantedBy=timers.target
+EOF
+
+systemctl daemon-reload
+systemctl enable --now ecr-pull-secret.timer
+/usr/local/bin/ecr-pull-secret

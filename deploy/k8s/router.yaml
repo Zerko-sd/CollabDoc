@@ -1,0 +1,107 @@
+# Caddy in front of the app pods.
+#
+# Why not round-robin: a document's live state (OT version counter, operation
+# log tail, authorship ledger) is held in memory by whichever pod opened it.
+# Two pods holding the same document would each number operations on their
+# own and the copies would diverge. So every request that names a document --
+# its WebSocket, its REST routes, its published page -- is hashed on the
+# document id and always lands on the same pod. Requests that name no
+# document go to any pod; per-user notifications reach the right socket
+# through Kafka.
+#
+# Upstreams are the StatefulSet's stable pod names, so the mapping survives
+# pod restarts. __SITE__ is ":80" for plain HTTP, or a hostname (for example
+# 13-233-1-2.sslip.io) to have Caddy fetch a Let's Encrypt certificate.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: caddy
+  namespace: collabdoc
+data:
+  Caddyfile: |
+    __SITE__ {
+        encode gzip
+
+        route {
+            # Only the router decides the affinity key.
+            request_header -X-Collabdoc-Doc
+
+            @doc path_regexp doc ^/(?:ws|api)/documents/([^/]+)
+            request_header @doc X-Collabdoc-Doc {re.doc.1}
+            @page path_regexp page ^/p/([^/]+)
+            request_header @page X-Collabdoc-Doc {re.page.1}
+
+            reverse_proxy __UPSTREAMS__ {
+                # Rendezvous hash on the document id; no header -> random pod.
+                lb_policy header X-Collabdoc-Doc
+                lb_try_duration 5s
+
+                health_uri /api/health
+                health_interval 5s
+                health_timeout 2s
+            }
+        }
+    }
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: caddy-data
+  namespace: collabdoc
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests: { storage: 1Gi }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: caddy
+  namespace: collabdoc
+spec:
+  replicas: 1
+  strategy: { type: Recreate } # the certificate volume is ReadWriteOnce
+  selector:
+    matchLabels: { app: caddy }
+  template:
+    metadata:
+      labels: { app: caddy }
+      annotations:
+        # Changing the Caddyfile changes this value, which restarts the pod.
+        collabdoc/config-hash: "__CONFIG_HASH__"
+    spec:
+      enableServiceLinks: false
+      containers:
+        - name: caddy
+          image: caddy:2.10.2-alpine
+          ports:
+            - { containerPort: 80, name: http }
+            - { containerPort: 443, name: https }
+          readinessProbe:
+            tcpSocket: { port: 80 }
+            periodSeconds: 5
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits: { memory: 256Mi }
+          volumeMounts:
+            - { name: config, mountPath: /etc/caddy }
+            - { name: data, mountPath: /data }
+      volumes:
+        - name: config
+          configMap: { name: caddy }
+        - name: data
+          persistentVolumeClaim: { claimName: caddy-data }
+---
+# k3s's built-in ServiceLB binds these ports on the node's Elastic IP.
+apiVersion: v1
+kind: Service
+metadata:
+  name: caddy
+  namespace: collabdoc
+spec:
+  type: LoadBalancer
+  externalTrafficPolicy: Local # keep the client's real IP for rate limiting
+  selector: { app: caddy }
+  ports:
+    - { name: http, port: 80, targetPort: http }
+    - { name: https, port: 443, targetPort: https }

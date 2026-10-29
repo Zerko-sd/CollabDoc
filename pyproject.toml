@@ -1,0 +1,25 @@
+[project]
+name = "collabdoc"
+version = "1.0.0"
+description = "Collaborative Document Server with AI Authorship Attribution"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.27",
+    "sqlalchemy>=2.0",
+    "pydantic-settings>=2.0",
+    "email-validator>=2.0",  # EmailStr in schemas.py
+    "pyjwt>=2.8",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "pytest-asyncio>=0.23", "httpx>=0.27"]
+postgres = ["psycopg[binary]>=3.1"]
+ai = ["anthropic>=1.0"]
+kafka = ["aiokafka>=0.10"]
+s3 = ["boto3>=1.34"]
+
+[tool.pytest.ini_options]
+testpaths = ["server/tests"]
+pythonpath = ["server"]
+filterwarnings = ["ignore::DeprecationWarning"]

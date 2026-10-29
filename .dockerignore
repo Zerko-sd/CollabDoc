@@ -1,0 +1,15 @@
+.git
+.venv
+.pytest_cache
+.claude
+**/__pycache__
+*.db
+*.db-*
+.env
+artifacts/
+uploads/
+deploy/
+docs/
+scripts/
+server/tests/
+web/tests/

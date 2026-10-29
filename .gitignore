@@ -1,0 +1,26 @@
+*.db
+*.db-journal
+*.pyc
+.coverage
+.env
+.pytest_cache/
+.venv/
+__pycache__/
+artifacts/
+htmlcov/
+web/tests/node_modules/
+web/tests/package-lock.json
+uploads/
+# Deployment: local state holds the database password and cluster credentials.
+deploy/.kubeconfig
+deploy/.rendered/
+deploy/terraform/.terraform/
+deploy/terraform/*.tfstate
+deploy/terraform/*.tfstate.*
+deploy/terraform/*.tfvars
+
+*.db-shm
+*.db-wal
+tfplan
+*.aux
+*.log

@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install the server
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Install the browser test harness
+        run: npm install --prefix web/tests --no-audit --no-fund
+
+      - name: Run the suite
+        run: pytest -q
+
+      - name: Install the browser harness
+        run: |
+          pip install playwright
+          python -m playwright install --with-deps chromium
+
+      - name: Check the app boots and serves
+        run: |
+          python -m uvicorn app.main:app --app-dir server --port 8000 &
+          for i in $(seq 1 30); do
+            curl -sf http://127.0.0.1:8000/api/health && break || sleep 1
+          done
+          curl -sf http://127.0.0.1:8000/api/health
+          python scripts/demo.py --base http://127.0.0.1:8000
+          python scripts/browser_check.py --base http://127.0.0.1:8000
+        env:
+          COLLABDOC_SECRET_KEY: ci-secret-key-0000000000000000000000
+
+      - name: Keep the browser screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-screenshots
+          path: artifacts/
+          if-no-files-found: ignore
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the image
+        run: docker build -t collabdoc:ci .

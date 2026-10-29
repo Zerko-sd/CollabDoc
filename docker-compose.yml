@@ -1,0 +1,30 @@
+# Local stand-in for the cloud deployment sketched in SRS 2.4.
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: collabdoc
+      POSTGRES_PASSWORD: collabdoc
+      POSTGRES_DB: collabdoc
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U collabdoc"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  app:
+    build: .
+    environment:
+      COLLABDOC_DATABASE_URL: postgresql+psycopg://collabdoc:collabdoc@db:5432/collabdoc
+      COLLABDOC_SECRET_KEY: ${COLLABDOC_SECRET_KEY:?set COLLABDOC_SECRET_KEY before starting}
+      COLLABDOC_BROADCASTER: memory
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:
